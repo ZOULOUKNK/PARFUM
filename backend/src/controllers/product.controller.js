@@ -3,6 +3,7 @@
 // suppression, recherche et association d'une image.
 // =====================================================================
 const { pool } = require('../config/db');
+const { publicUrl, deleteImage, discardUpload } = require('../middleware/upload.middleware');
 
 const BASE_SELECT = `
   SELECT p.id, p.nom, p.categorie_id, c.nom AS categorie, p.marque,
@@ -64,6 +65,7 @@ async function create(req, res, next) {
     } = req.body;
 
     if (!nom || !categorie_id || prix_vente === undefined) {
+      discardUpload(req);
       return res.status(400).json({
         success: false,
         message: 'Les champs nom, categorie_id et prix_vente sont obligatoires.',
@@ -71,7 +73,7 @@ async function create(req, res, next) {
     }
 
     // Chemin relatif de l'image si un fichier a été envoyé (voir upload.middleware)
-    const imageUrl = req.file ? `/uploads/products/${req.file.filename}` : null;
+    const imageUrl = req.file ? publicUrl(req.file.filename) : null;
 
     const [result] = await pool.query(
       `INSERT INTO produits
@@ -109,6 +111,7 @@ async function update(req, res, next) {
     const { id } = req.params;
     const [existingRows] = await pool.query('SELECT * FROM produits WHERE id = ?', [id]);
     if (existingRows.length === 0) {
+      discardUpload(req);
       return res.status(404).json({ success: false, message: 'Produit introuvable.' });
     }
     const existing = existingRows[0];
@@ -119,7 +122,7 @@ async function update(req, res, next) {
     } = req.body;
 
     // Nouvelle image uniquement si le client en envoie une, sinon on garde l'ancienne
-    const imageUrl = req.file ? `/uploads/products/${req.file.filename}` : existing.image_url;
+    const imageUrl = req.file ? publicUrl(req.file.filename) : existing.image_url;
 
     await pool.query(
       `UPDATE produits SET
@@ -141,6 +144,9 @@ async function update(req, res, next) {
       ]
     );
 
+    // L'ancienne image, remplacée, n'est plus référencée : on la supprime.
+    if (req.file && existing.image_url) deleteImage(existing.image_url);
+
     const [rows] = await pool.query(`${BASE_SELECT} WHERE p.id = ?`, [id]);
     return res.json({ success: true, message: 'Produit mis à jour.', data: rows[0] });
   } catch (error) {
@@ -151,10 +157,14 @@ async function update(req, res, next) {
 // DELETE /api/products/:id
 async function remove(req, res, next) {
   try {
-    const [result] = await pool.query('DELETE FROM produits WHERE id = ?', [req.params.id]);
-    if (result.affectedRows === 0) {
+    const [rows] = await pool.query('SELECT image_url FROM produits WHERE id = ?', [req.params.id]);
+    if (rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Produit introuvable.' });
     }
+
+    await pool.query('DELETE FROM produits WHERE id = ?', [req.params.id]);
+    deleteImage(rows[0].image_url); // après la suppression : si elle échoue, l'image reste
+
     return res.json({ success: true, message: 'Produit supprimé.' });
   } catch (error) {
     next(error);

@@ -7,11 +7,11 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const path = require('path');
 const rateLimit = require('express-rate-limit');
 
 const apiRoutes = require('./src/routes');
 const { errorHandler, notFoundHandler } = require('./src/middleware/error.middleware');
+const { uploadDir } = require('./src/middleware/upload.middleware');
 
 const app = express();
 
@@ -43,7 +43,7 @@ const loginLimiter = rateLimit({
 app.use('/api/auth/login', loginLimiter);
 
 // Sert les images de produits de manière statique
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads/products', express.static(uploadDir));
 
 // ---------------------------------------------------------------------
 // Routes

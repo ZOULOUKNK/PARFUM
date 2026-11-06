@@ -3,8 +3,23 @@
 // Toute erreur non interceptée dans les contrôleurs (via next(err))
 // atterrit ici et renvoie une réponse JSON homogène au frontend.
 // =====================================================================
+const { discardUpload } = require('./upload.middleware');
+
+// Codes d'erreur signalant une base MySQL injoignable ou mal configurée
+const DB_UNAVAILABLE = ['ECONNREFUSED', 'ETIMEDOUT', 'PROTOCOL_CONNECTION_LOST', 'ER_ACCESS_DENIED_ERROR', 'ER_BAD_DB_ERROR'];
+
 function errorHandler(err, req, res, next) {
   console.error('❌ Erreur:', err.message);
+
+  // Une requête refusée ne doit pas laisser d'image orpheline sur le disque
+  discardUpload(req);
+
+  if (DB_UNAVAILABLE.includes(err.code)) {
+    return res.status(503).json({
+      success: false,
+      message: 'Base de données indisponible. Réessayez dans quelques instants.',
+    });
+  }
 
   // Erreur MySQL : entrée dupliquée (ex : email déjà utilisé)
   if (err.code === 'ER_DUP_ENTRY') {
@@ -27,10 +42,13 @@ function errorHandler(err, req, res, next) {
     return res.status(400).json({ success: false, message: `Erreur d'upload : ${err.message}` });
   }
 
+  // Erreurs prévues (4xx) : message destiné à l'utilisateur. Erreurs
+  // imprévues (500) : message générique, le détail (SQL, chemins…) reste
+  // dans les journaux du serveur.
   const statusCode = err.statusCode || 500;
   return res.status(statusCode).json({
     success: false,
-    message: err.message || 'Erreur interne du serveur.',
+    message: statusCode < 500 ? err.message : 'Erreur interne du serveur.',
   });
 }
 

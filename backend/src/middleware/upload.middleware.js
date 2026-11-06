@@ -7,7 +7,10 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-const uploadDir = process.env.UPLOAD_DIR || 'uploads/products';
+// Chemin absolu : relatif au dossier backend, quel que soit le dossier
+// depuis lequel le serveur est lancé (express.static utilise le même).
+const uploadDir = path.resolve(__dirname, '../..', process.env.UPLOAD_DIR || 'uploads/products');
+const PUBLIC_PREFIX = '/uploads/products/';
 
 // Crée le dossier d'upload s'il n'existe pas encore
 if (!fs.existsSync(uploadDir)) {
@@ -31,7 +34,9 @@ function fileFilter(req, file, cb) {
   if (isValidExt && isValidMime) {
     return cb(null, true);
   }
-  cb(new Error('Format d\'image non autorisé. Utilisez JPG, PNG ou WEBP.'));
+  const error = new Error("Format d'image non autorisé. Utilisez JPG, PNG ou WEBP.");
+  error.statusCode = 400;
+  cb(error);
 }
 
 const maxSizeMb = Number(process.env.MAX_UPLOAD_SIZE_MB) || 5;
@@ -42,4 +47,27 @@ const upload = multer({
   limits: { fileSize: maxSizeMb * 1024 * 1024 },
 });
 
+// URL publique d'une image enregistrée (servie par app.js)
+function publicUrl(filename) {
+  return PUBLIC_PREFIX + filename;
+}
+
+// Supprime le fichier d'une image à partir de son URL publique. Seul le
+// nom de fichier est conservé (path.basename) : une URL forgée du type
+// « ../../fichier » ne peut pas faire effacer un fichier hors du dossier.
+function deleteImage(imageUrl) {
+  if (!imageUrl || !imageUrl.startsWith(PUBLIC_PREFIX)) return;
+  const file = path.join(uploadDir, path.basename(imageUrl));
+  fs.unlink(file, () => {}); // fichier déjà absent : rien à faire
+}
+
+// Supprime le fichier envoyé avec une requête refusée (validation, erreur)
+function discardUpload(req) {
+  if (req.file?.path) fs.unlink(req.file.path, () => {});
+}
+
 module.exports = upload;
+module.exports.uploadDir = uploadDir;
+module.exports.publicUrl = publicUrl;
+module.exports.deleteImage = deleteImage;
+module.exports.discardUpload = discardUpload;

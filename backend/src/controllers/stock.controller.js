@@ -9,8 +9,11 @@ const { pool } = require('../config/db');
 
 // POST /api/stock/entree
 async function enregistrerEntree(req, res, next) {
-  const connection = await pool.getConnection();
+  // Obtenue dans le try : si MySQL est injoignable, l'erreur part vers
+  // le gestionnaire d'erreurs au lieu de laisser la requête sans réponse.
+  let connection;
   try {
+    connection = await pool.getConnection();
     const { produit_id, quantite, motif } = req.body;
 
     if (!produit_id || !quantite || quantite <= 0) {
@@ -52,17 +55,20 @@ async function enregistrerEntree(req, res, next) {
       data: { nouvelle_quantite: updatedProduct[0].quantite_stock },
     });
   } catch (error) {
-    await connection.rollback();
+    if (connection) await connection.rollback().catch(() => {});
     next(error);
   } finally {
-    connection.release();
+    if (connection) connection.release();
   }
 }
 
 // POST /api/stock/sortie
 async function enregistrerSortie(req, res, next) {
-  const connection = await pool.getConnection();
+  // Obtenue dans le try : si MySQL est injoignable, l'erreur part vers
+  // le gestionnaire d'erreurs au lieu de laisser la requête sans réponse.
+  let connection;
   try {
+    connection = await pool.getConnection();
     const { produit_id, quantite, motif } = req.body;
 
     if (!produit_id || !quantite || quantite <= 0) {
@@ -117,10 +123,10 @@ async function enregistrerSortie(req, res, next) {
       },
     });
   } catch (error) {
-    await connection.rollback();
+    if (connection) await connection.rollback().catch(() => {});
     next(error);
   } finally {
-    connection.release();
+    if (connection) connection.release();
   }
 }
 
