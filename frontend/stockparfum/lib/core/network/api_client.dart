@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -26,6 +27,10 @@ class ApiClient {
   final _storage = const FlutterSecureStorage();
   final String baseUrl = AppConstants.baseUrl;
 
+  /// Appelé quand le serveur refuse le jeton (expiré ou invalide) :
+  /// main.dart s'en sert pour renvoyer vers l'écran de connexion.
+  static void Function()? onSessionExpired;
+
   Future<String?> get _token async => _storage.read(key: AppConstants.tokenKey);
 
   Future<Map<String, String>> get _headers async {
@@ -45,37 +50,53 @@ class ApiClient {
 
   Future<dynamic> get(String path, {Map<String, dynamic>? query}) async {
     try {
-      final response = await http.get(_uri(path, query), headers: await _headers);
+      final response = await http
+          .get(_uri(path, query), headers: await _headers)
+          .timeout(AppConstants.requestTimeout);
       return _handleResponse(response);
     } on SocketException {
       throw ApiException('Impossible de contacter le serveur. Vérifiez votre connexion.');
+    } on TimeoutException {
+      throw ApiException('Le serveur ne répond pas. Vérifiez son adresse et votre connexion.');
     }
   }
 
   Future<dynamic> post(String path, Map<String, dynamic> body) async {
     try {
-      final response = await http.post(_uri(path), headers: await _headers, body: jsonEncode(body));
+      final response = await http
+          .post(_uri(path), headers: await _headers, body: jsonEncode(body))
+          .timeout(AppConstants.requestTimeout);
       return _handleResponse(response);
     } on SocketException {
       throw ApiException('Impossible de contacter le serveur. Vérifiez votre connexion.');
+    } on TimeoutException {
+      throw ApiException('Le serveur ne répond pas. Vérifiez son adresse et votre connexion.');
     }
   }
 
   Future<dynamic> put(String path, Map<String, dynamic> body) async {
     try {
-      final response = await http.put(_uri(path), headers: await _headers, body: jsonEncode(body));
+      final response = await http
+          .put(_uri(path), headers: await _headers, body: jsonEncode(body))
+          .timeout(AppConstants.requestTimeout);
       return _handleResponse(response);
     } on SocketException {
       throw ApiException('Impossible de contacter le serveur. Vérifiez votre connexion.');
+    } on TimeoutException {
+      throw ApiException('Le serveur ne répond pas. Vérifiez son adresse et votre connexion.');
     }
   }
 
   Future<dynamic> delete(String path) async {
     try {
-      final response = await http.delete(_uri(path), headers: await _headers);
+      final response = await http
+          .delete(_uri(path), headers: await _headers)
+          .timeout(AppConstants.requestTimeout);
       return _handleResponse(response);
     } on SocketException {
       throw ApiException('Impossible de contacter le serveur. Vérifiez votre connexion.');
+    } on TimeoutException {
+      throw ApiException('Le serveur ne répond pas. Vérifiez son adresse et votre connexion.');
     }
   }
 
@@ -97,15 +118,27 @@ class ApiClient {
         request.files.add(await http.MultipartFile.fromPath(imageFieldName, imagePath));
       }
 
-      final streamedResponse = await request.send();
+      final streamedResponse = await request.send().timeout(AppConstants.requestTimeout);
       final response = await http.Response.fromStream(streamedResponse);
       return _handleResponse(response);
     } on SocketException {
       throw ApiException('Impossible de contacter le serveur. Vérifiez votre connexion.');
+    } on TimeoutException {
+      throw ApiException('Le serveur ne répond pas. Vérifiez son adresse et votre connexion.');
     }
   }
 
   dynamic _handleResponse(http.Response response) {
+    // Jeton expiré ou invalide sur une route protégée : on efface la
+    // session locale et on prévient l'application (retour à la connexion).
+    // La route de connexion renvoie aussi 401 (mauvais mot de passe) :
+    // elle est exclue.
+    final isLoginRequest = response.request?.url.path.endsWith('/auth/login') ?? false;
+    if (response.statusCode == 401 && !isLoginRequest) {
+      _storage.deleteAll();
+      onSessionExpired?.call();
+    }
+
     Map<String, dynamic> decoded;
     try {
       decoded = jsonDecode(response.body) as Map<String, dynamic>;

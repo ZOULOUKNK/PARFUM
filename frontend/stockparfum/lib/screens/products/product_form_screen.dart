@@ -149,7 +149,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   String? _existingImageUrl() {
     final url = widget.product?.imageUrl;
     if (url == null) return null;
-    return '${AppConstants.baseUrl.replaceAll('/api', '')}$url';
+    return '${AppConstants.serverUrl}$url';
   }
 
   @override

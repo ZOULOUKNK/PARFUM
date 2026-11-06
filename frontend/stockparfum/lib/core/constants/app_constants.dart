@@ -8,7 +8,22 @@ class AppConstants {
   /// - Appareil physique : remplacez par l'adresse IP locale de votre
   ///   machine (ex : http://192.168.1.10:3000/api) ou l'URL de
   ///   production une fois déployée.
-  static const String baseUrl = 'http://10.0.2.2:3000/api';
+  /// Modifiable sans toucher au code :
+  ///   flutter run --dart-define=API_URL=http://192.168.1.10:3000/api
+  static const String baseUrl = String.fromEnvironment(
+    'API_URL',
+    defaultValue: 'http://10.0.2.2:3000/api',
+  );
+
+  /// Adresse du serveur sans le suffixe « /api » (pour les images).
+  /// replaceAll('/api', '') abîmait les domaines du type
+  /// https://api.exemple.mg/api.
+  static String get serverUrl => baseUrl.endsWith('/api')
+      ? baseUrl.substring(0, baseUrl.length - '/api'.length)
+      : baseUrl;
+
+  /// Délai maximal d'attente d'une réponse du serveur.
+  static const Duration requestTimeout = Duration(seconds: 15);
 
   static const String appName = 'StockParfum';
 

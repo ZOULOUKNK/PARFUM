@@ -20,7 +20,7 @@ class ProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final imageFullUrl = product.imageUrl != null
-        ? '${AppConstants.baseUrl.replaceAll('/api', '')}${product.imageUrl}'
+        ? '${AppConstants.serverUrl}${product.imageUrl}'
         : null;
 
     return Card(
