@@ -78,6 +78,10 @@ variables `SEED_ADMIN_*` du fichier `.env` avant d'exécuter `npm run seed`).
   Antares, Déodorants, Crèmes pour le visage)
 - **Stock** : entrées/sorties avec mise à jour automatique des quantités et
   alerte de seuil minimum
+- **Traçabilité** : chaque variation de stock figure dans l'historique. La
+  quantité de départ d'un nouveau produit est enregistrée comme entrée
+  « Stock initial » ; une quantité corrigée depuis la fiche produit est
+  enregistrée comme entrée ou sortie « Ajustement manuel »
 - **Historique des sorties** : page dédiée (produit, catégorie, quantité,
   date, heure)
 - **Fournisseurs** : CRUD complet, recherche (nom, téléphone, adresse)

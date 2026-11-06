@@ -129,3 +129,57 @@ describe('Fournisseurs', () => {
     assert.equal(select.params.length, 3);
   });
 });
+
+describe('Historique du stock', () => {
+  const mouvements = () => calls.filter((c) => /INSERT INTO mouvements_stock/.test(c.sql));
+
+  test('une quantité de départ est enregistrée comme entrée « Stock initial »', async () => {
+    onQuery((sql) => (/INSERT INTO produits/.test(sql) ? [{ insertId: 7 }] : [[{ id: 7 }]]));
+    const res = await request(app).post('/api/products').set(auth())
+      .send({ nom: 'Musc blanc', categorie_id: 1, prix_vente: 25000, quantite_stock: 12 });
+
+    assert.equal(res.status, 201);
+    assert.equal(mouvements().length, 1);
+    assert.match(mouvements()[0].sql, /'ENTREE'/);
+    assert.deepEqual(mouvements()[0].params.slice(0, 2), [7, 12]);
+    assert.ok(calls.some((c) => c.sql === 'COMMIT'));
+  });
+
+  test('sans quantité de départ, aucun mouvement', async () => {
+    onQuery((sql) => (/INSERT INTO produits/.test(sql) ? [{ insertId: 8 }] : [[{ id: 8 }]]));
+    await request(app).post('/api/products').set(auth()).send({ nom: 'Déo', categorie_id: 3, prix_vente: 9000 });
+    assert.equal(mouvements().length, 0);
+  });
+
+  test('modifier la quantité enregistre l\'écart comme ajustement', async () => {
+    const existing = { id: 1, nom: 'P', categorie_id: 1, prix_vente: 10, quantite_stock: 10, image_url: null };
+    onQuery((sql) => (/SELECT \*/.test(sql) || /FROM produits p/.test(sql) ? [[existing]] : [{ affectedRows: 1 }]));
+
+    await request(app).put('/api/products/1').set(auth()).send({ quantite_stock: 7 });
+    assert.equal(mouvements().length, 1);
+    assert.match(mouvements()[0].sql, /'SORTIE'/);
+    assert.equal(mouvements()[0].params[1], 3);
+    assert.match(mouvements()[0].params[2], /Ajustement/);
+
+    onQuery((sql) => (/SELECT \*/.test(sql) || /FROM produits p/.test(sql) ? [[existing]] : [{ affectedRows: 1 }]));
+    await request(app).put('/api/products/1').set(auth()).send({ quantite_stock: 15 });
+    assert.match(mouvements()[0].sql, /'ENTREE'/);
+    assert.equal(mouvements()[0].params[1], 5);
+  });
+
+  test('modifier un produit sans changer la quantité ne crée pas de mouvement', async () => {
+    const existing = { id: 1, nom: 'P', categorie_id: 1, prix_vente: 10, quantite_stock: 10, image_url: null };
+    onQuery((sql) => (/SELECT \*/.test(sql) || /FROM produits p/.test(sql) ? [[existing]] : [{ affectedRows: 1 }]));
+    await request(app).put('/api/products/1').set(auth()).send({ nom: 'Nouveau nom', quantite_stock: 10 });
+    assert.equal(mouvements().length, 0);
+  });
+
+  test('refuse une quantité ou un prix négatif', async () => {
+    onQuery(() => [[]]);
+    const a = await request(app).post('/api/products').set(auth())
+      .send({ nom: 'X', categorie_id: 1, prix_vente: 10, quantite_stock: -4 });
+    const b = await request(app).put('/api/products/1').set(auth()).send({ prix_vente: -1 });
+    assert.equal(a.status, 400);
+    assert.equal(b.status, 400);
+  });
+});

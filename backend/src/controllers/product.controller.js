@@ -56,8 +56,20 @@ async function getById(req, res, next) {
   }
 }
 
+// Enregistre un mouvement de stock dans la transaction en cours, pour que
+// l'historique explique toujours la quantité affichée.
+async function recordMovement(connection, produitId, difference, motif, adminId) {
+  if (!difference) return;
+  await connection.query(
+    `INSERT INTO mouvements_stock (produit_id, type_mouvement, quantite, motif, admin_id)
+     VALUES (?, '${difference > 0 ? 'ENTREE' : 'SORTIE'}', ?, ?, ?)`,
+    [produitId, Math.abs(difference), motif, adminId || null]
+  );
+}
+
 // POST /api/products
 async function create(req, res, next) {
+  let connection;
   try {
     const {
       nom, categorie_id, marque, prix_achat, prix_vente,
@@ -74,8 +86,12 @@ async function create(req, res, next) {
 
     // Chemin relatif de l'image si un fichier a été envoyé (voir upload.middleware)
     const imageUrl = req.file ? publicUrl(req.file.filename) : null;
+    const quantiteInitiale = Number(quantite_stock) || 0;
 
-    const [result] = await pool.query(
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    const [result] = await connection.query(
       `INSERT INTO produits
         (nom, categorie_id, marque, prix_achat, prix_vente, quantite_stock,
          seuil_minimum, image_url, fournisseur_id, date_ajout)
@@ -86,13 +102,16 @@ async function create(req, res, next) {
         marque || null,
         prix_achat || 0,
         prix_vente,
-        quantite_stock || 0,
+        quantiteInitiale,
         seuil_minimum || 5,
         imageUrl,
         fournisseur_id || null,
         date_ajout || new Date().toISOString().slice(0, 10),
       ]
     );
+
+    await recordMovement(connection, result.insertId, quantiteInitiale, 'Stock initial', req.admin?.id);
+    await connection.commit();
 
     const [rows] = await pool.query(`${BASE_SELECT} WHERE p.id = ?`, [result.insertId]);
     return res.status(201).json({
@@ -101,16 +120,28 @@ async function create(req, res, next) {
       data: rows[0],
     });
   } catch (error) {
+    if (connection) await connection.rollback().catch(() => {});
     next(error);
+  } finally {
+    if (connection) connection.release();
   }
 }
 
 // PUT /api/products/:id
+// La quantité reste modifiable depuis la fiche produit, mais tout écart est
+// enregistré comme mouvement d'ajustement : sinon l'historique ne
+// correspondait plus au stock.
 async function update(req, res, next) {
+  let connection;
   try {
     const { id } = req.params;
-    const [existingRows] = await pool.query('SELECT * FROM produits WHERE id = ?', [id]);
+
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    const [existingRows] = await connection.query('SELECT * FROM produits WHERE id = ? FOR UPDATE', [id]);
     if (existingRows.length === 0) {
+      await connection.rollback();
       discardUpload(req);
       return res.status(404).json({ success: false, message: 'Produit introuvable.' });
     }
@@ -123,8 +154,11 @@ async function update(req, res, next) {
 
     // Nouvelle image uniquement si le client en envoie une, sinon on garde l'ancienne
     const imageUrl = req.file ? publicUrl(req.file.filename) : existing.image_url;
+    const nouvelleQuantite = quantite_stock === undefined || quantite_stock === ''
+      ? Number(existing.quantite_stock)
+      : Number(quantite_stock);
 
-    await pool.query(
+    await connection.query(
       `UPDATE produits SET
         nom = ?, categorie_id = ?, marque = ?, prix_achat = ?, prix_vente = ?,
         quantite_stock = ?, seuil_minimum = ?, image_url = ?, fournisseur_id = ?, date_ajout = ?
@@ -135,7 +169,7 @@ async function update(req, res, next) {
         marque ?? existing.marque,
         prix_achat ?? existing.prix_achat,
         prix_vente ?? existing.prix_vente,
-        quantite_stock ?? existing.quantite_stock,
+        nouvelleQuantite,
         seuil_minimum ?? existing.seuil_minimum,
         imageUrl,
         fournisseur_id ?? existing.fournisseur_id,
@@ -144,13 +178,25 @@ async function update(req, res, next) {
       ]
     );
 
+    await recordMovement(
+      connection,
+      Number(id),
+      nouvelleQuantite - Number(existing.quantite_stock),
+      'Ajustement manuel (modification de la fiche produit)',
+      req.admin?.id
+    );
+    await connection.commit();
+
     // L'ancienne image, remplacée, n'est plus référencée : on la supprime.
     if (req.file && existing.image_url) deleteImage(existing.image_url);
 
     const [rows] = await pool.query(`${BASE_SELECT} WHERE p.id = ?`, [id]);
     return res.json({ success: true, message: 'Produit mis à jour.', data: rows[0] });
   } catch (error) {
+    if (connection) await connection.rollback().catch(() => {});
     next(error);
+  } finally {
+    if (connection) connection.release();
   }
 }
 
