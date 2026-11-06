@@ -1,0 +1,25 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Node.js (backend)
+node_modules/
+npm-debug.log*
+backend/uploads/
+
+# Flutter / Dart (frontend)
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+*.iml
+.idea/
+.vscode/
+frontend/stockparfum/android/local.properties
+frontend/stockparfum/ios/Flutter/Generated.xcconfig
+
+# Systèmes
+.DS_Store
+Thumbs.db
