@@ -11,8 +11,8 @@ async function getAll(req, res, next) {
     const params = [];
 
     if (search) {
-      query += ' WHERE nom LIKE ? OR telephone LIKE ?';
-      params.push(`%${search}%`, `%${search}%`);
+      query += ' WHERE nom LIKE ? OR telephone LIKE ? OR adresse LIKE ?';
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
     query += ' ORDER BY nom ASC';
 

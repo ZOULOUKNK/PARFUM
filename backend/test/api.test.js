@@ -119,3 +119,13 @@ describe('Images des produits', () => {
     fs.unlinkSync(outside);
   });
 });
+
+describe('Fournisseurs', () => {
+  test("cherche aussi dans l'adresse (comme annoncé dans le README)", async () => {
+    onQuery(() => [[]]);
+    await request(app).get('/api/suppliers?search=Analakely').set(auth());
+    const select = calls.find((c) => /FROM fournisseurs/.test(c.sql));
+    assert.match(select.sql, /adresse LIKE \?/);
+    assert.equal(select.params.length, 3);
+  });
+});
