@@ -104,6 +104,6 @@ CREATE TABLE IF NOT EXISTS mouvements_stock (
 -- Compte administrateur par défaut
 -- Le mot de passe doit être haché avec bcrypt : ne JAMAIS insérer de
 -- mot de passe en clair. Utilisez le script "npm run seed" (voir
--- backend/src/utils/seed.js) qui crée le compte
--- admin@stockparfum.mg / Admin@123 avec un hash bcrypt valide.
+-- backend/src/utils/seed.js) qui crée le compte défini par les
+-- variables SEED_ADMIN_* du fichier .env avec un hash bcrypt valide.
 -- ---------------------------------------------------------------------

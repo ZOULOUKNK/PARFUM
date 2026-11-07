@@ -31,7 +31,7 @@ cd backend
 cp .env.example .env      # Windows : Copy-Item .env.example .env
                           # puis renseignez MySQL et un JWT_SECRET (32 caractères min.)
 npm install
-npm run seed               # crée le compte admin (admin@stockparfum.mg / Admin@123)
+npm run seed               # crée le compte admin défini par SEED_ADMIN_* dans .env
 npm run dev                 # démarre le serveur sur http://localhost:3000
 ```
 
@@ -66,8 +66,8 @@ balise `<application>` — à retirer avant une mise en production avec HTTPS.
 
 Lancez ensuite l'application avec `flutter run` (voir l'adresse de l'API ci-dessus).
 
-Connectez-vous avec `admin@stockparfum.mg` / `Admin@123` (modifiable via les
-variables `SEED_ADMIN_*` du fichier `.env` avant d'exécuter `npm run seed`).
+Connectez-vous avec le compte administrateur défini par les variables
+`SEED_ADMIN_*` du fichier `.env` avant d'exécuter `npm run seed`.
 
 ## Fonctionnalités
 
